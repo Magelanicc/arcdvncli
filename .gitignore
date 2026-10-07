@@ -1,0 +1,21 @@
+# Environments
+.env
+.venv/
+venv/
+env/
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build and Distribution
+build/
+dist/
+*.egg-info/
+*.spec
+
+# OS specific
+.DS_Store
+Thumbs.db
