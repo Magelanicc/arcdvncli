@@ -1,16 +1,33 @@
 [build-system]
-requires = ["setuptools>=70"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "arcdvncli"
-version = "0.1.0"
+dynamic = ["version"]
 description = "ARCDVNCLI - AI coding agent for the terminal"
+readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "ARCDVN" }]
+keywords = ["ai", "cli", "coding-agent", "openrouter"]
+classifiers = [
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Environment :: Console",
+]
 dependencies = ["requests>=2.32.0", "rich>=13.0.0", "prompt-toolkit>=3.0.0"]
+
+[project.urls]
+Homepage = "https://github.com/Magelanicc/arcdvncli"
+Issues = "https://github.com/Magelanicc/arcdvncli/issues"
 
 [project.scripts]
 arcdvncli = "arcdvncli.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "arcdvncli.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["arcdvncli*"]

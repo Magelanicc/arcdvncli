@@ -1,0 +1,53 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - { os: windows-latest, name: windows }
+          - { os: ubuntu-latest,  name: linux }
+          - { os: macos-latest,   name: macos }
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Pastikan tag sama dengan versi di kode
+        shell: bash
+        run: |
+          V=$(python -c "import arcdvncli; print(arcdvncli.__version__)")
+          if [ "v$V" != "${{ github.ref_name }}" ]; then
+            echo "Tag ${{ github.ref_name }} tidak sama dengan versi kode v$V"
+            exit 1
+          fi
+      - run: pip install . pyinstaller
+      - run: python tests/smoke_test.py
+      - run: pyinstaller --onefile --name arcdvncli-${{ matrix.name }} --clean entry.py
+      - name: Tes binary
+        shell: bash
+        run: ./dist/arcdvncli-${{ matrix.name }}* --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ matrix.name }}
+          path: dist/arcdvncli-*
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: bin-*
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
