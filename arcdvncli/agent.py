@@ -16,6 +16,7 @@ console = Console()
 TOOL_ICONS = {
     "list_files": "📂",
     "read_file": "📖",
+    "edit_file": "📝",
     "write_file": "✏️",
     "run_command": "💻",
 }
@@ -25,6 +26,7 @@ You help inspect, modify, debug, and run software projects.
 Current working directory is the project root.
 Use tools instead of guessing about files.
 Before making changes, inspect relevant files when needed.
+To modify existing files, always prefer edit_file (search-and-replace) to replace only the necessary lines. Only use write_file when creating new files or when a complete rewrite is genuinely needed.
 Keep responses concise and explain what you changed.
 Never expose or request secrets unnecessarily.
 For destructive or risky operations, ask the user instead of blindly doing them.
@@ -43,9 +45,13 @@ def _format_args_preview(args):
         return ""
     parts = []
     for k, v in args.items():
-        if k == "content":
-            lines = len(str(v).splitlines())
-            parts.append(f"content=<{lines} baris>")
+        if k in ("content", "old_str", "new_str", "old_text", "new_text"):
+            val_lines = str(v).splitlines()
+            if len(val_lines) > 1:
+                parts.append(f"{k}=<{len(val_lines)} baris>")
+            else:
+                display_val = str(v) if len(str(v)) <= 45 else str(v)[:42] + "..."
+                parts.append(f'{k}="{display_val}"')
         elif isinstance(v, str):
             display_val = v if len(v) <= 45 else v[:42] + "..."
             parts.append(f'{k}="{display_val}"')

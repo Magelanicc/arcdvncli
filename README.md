@@ -4,8 +4,8 @@ ARCDVN Code adalah asisten AI coding (AI Agent) yang berjalan langsung di dalam 
 
 ## ✨ Fitur Utama
 
-- **Berjalan Otomatis di Proyek**: Mampu membaca file, mengedit file, dan melihat struktur folder secara mandiri (jika Anda suruh).
-- **Eksekusi Perintah Aman**: AI bisa menjalankan perintah terminal (seperti menginstal paket atau menjalankan script), namun akan **selalu** meminta izin `(y/N)` dari Anda terlebih dahulu. Menimpa file yang sudah ada juga selalu meminta izin.
+- **Berjalan Otomatis di Proyek**: Mampu membaca file, mengedit kode secara presisi (*search-and-replace* hemat token), dan melihat struktur folder secara mandiri.
+- **Eksekusi Perintah Aman**: AI bisa menjalankan perintah terminal (seperti menginstal paket atau menjalankan script), namun akan **selalu** meminta izin `(y/N)` dari Anda terlebih dahulu. Menimpa atau mengedit file yang sudah ada juga selalu meminta izin.
 - **Bebas Pilih Model AI**: Anda bisa memasukkan API Key dari **OpenRouter** dan bebas memilih model AI apa pun yang ingin dipakai.
 - **Konfigurasi Global**: Pengaturan API Key tersimpan di komputer Anda, cukup disetel sekali via terminal.
 
@@ -24,11 +24,11 @@ Prasyarat: **Python 3.10+**, **git**, dan **pipx**.
 Setelah itu **tutup dan buka lagi terminal**, lalu:
 
 ```bash
-pipx install git+https://github.com/Magelanicc/arcdvncli.git@v0.1.1
+pipx install git+https://github.com/Magelanicc/arcdvncli.git@v0.1.2
 arcdvncli --version
 ```
 
-(Ganti `v0.1.1` dengan versi terbaru di halaman [Releases](https://github.com/Magelanicc/arcdvncli/releases).)
+(Ganti `v0.1.2` dengan versi terbaru di halaman [Releases](https://github.com/Magelanicc/arcdvncli/releases).)
 
 ### Cara 2: Binary siap pakai (tanpa Python)
 

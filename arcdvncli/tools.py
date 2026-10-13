@@ -124,6 +124,82 @@ def write_file(path, content):
     return f"wrote {p.relative_to(ROOT)}"
 
 
+def edit_file(path, old_str=None, new_str=None, replace_all=False, **kwargs):
+    # Fallback to alternate param names if LLM uses variations
+    if old_str is None:
+        for k in ("old_text", "old_content", "target", "search"):
+            if k in kwargs:
+                old_str = kwargs[k]
+                break
+    if new_str is None:
+        for k in ("new_text", "new_content", "replacement", "replace"):
+            if k in kwargs:
+                new_str = kwargs[k]
+                break
+
+    if old_str is None:
+        raise ValueError("Parameter 'old_str' wajib diisi.")
+    if new_str is None:
+        raise ValueError("Parameter 'new_str' wajib diisi.")
+    if not old_str:
+        raise ValueError("'old_str' tidak boleh berupa string kosong.")
+
+    p = safe_path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"File tidak ditemukan: {path}. Gunakan write_file jika ingin membuat file baru.")
+    if not p.is_file():
+        raise IsADirectoryError(f"Path adalah direktori: {path}")
+    if _is_sensitive(p):
+        raise PermissionError(f"{p.name} berisi data sensitif, tidak boleh diedit agent.")
+
+    original_text = p.read_text(encoding="utf-8", errors="replace")
+
+    # 1. Cek kecocokan langsung (exact match)
+    if old_str in original_text:
+        count = original_text.count(old_str)
+        if count > 1 and not replace_all:
+            return (
+                f"Gagal mengedit {p.relative_to(ROOT)}: 'old_str' ditemukan sebanyak {count} kali di dalam file. "
+                "Sertakan lebih banyak baris konteks di sekitarnya agar unik."
+            )
+        new_content = original_text.replace(old_str, new_str, -1 if replace_all else 1)
+    else:
+        # 2. Coba normalisasi line ending (\r\n vs \n) jika format baris berbeda
+        crlf_file = "\r\n" in original_text
+        norm_text = original_text.replace("\r\n", "\n")
+        norm_old = old_str.replace("\r\n", "\n")
+        norm_new = new_str.replace("\r\n", "\n")
+
+        count = norm_text.count(norm_old)
+        if count == 0:
+            return (
+                f"Gagal mengedit {p.relative_to(ROOT)}: Teks 'old_str' tidak ditemukan di dalam file. "
+                "Pastikan indentasi, spasi, dan baris kode persis sama dengan isi file. "
+                "Gunakan read_file untuk memeriksa isi file terlebih dahulu."
+            )
+        if count > 1 and not replace_all:
+            return (
+                f"Gagal mengedit {p.relative_to(ROOT)}: 'old_str' ditemukan sebanyak {count} kali di dalam file. "
+                "Sertakan lebih banyak baris konteks di sekitarnya agar unik."
+            )
+
+        norm_result = norm_text.replace(norm_old, norm_new, -1 if replace_all else 1)
+        new_content = norm_result.replace("\n", "\r\n") if crlf_file else norm_result
+
+    if new_content == original_text:
+        return f"Tidak ada perubahan pada {p.relative_to(ROOT)}: old_str dan new_str menghasilkan teks yang sama."
+
+    rel_path = str(p.relative_to(ROOT))
+    _show_diff(original_text, new_content, rel_path)
+
+    if not _confirm(f"Terapkan perubahan pada: {escape(rel_path)}?"):
+        console.print("[red]Perubahan file dibatalkan oleh user.[/red]")
+        return "Edit rejected by user."
+
+    p.write_text(new_content, encoding="utf-8")
+    return f"edited {rel_path}"
+
+
 def _command_preview(command):
     command = " ".join(command.split())
     return command if len(command) <= 120 else command[:117] + "..."
@@ -163,7 +239,9 @@ TOOL_DEFS = [
      "parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":[]}},
     {"name":"read_file","description":"Read a text file from the current project.",
      "parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}},
-    {"name":"write_file","description":"Create or overwrite a text file in the current project. Overwriting needs user approval.",
+    {"name":"edit_file","description":"Edit an existing file by replacing a specific block of text (old_str) with new text (new_str). This is much faster, token-efficient, and preferred over write_file for modifying existing files. old_str must uniquely match the code in the file.",
+     "parameters":{"type":"object","properties":{"path":{"type":"string","description":"Relative path to the file to edit"},"old_str":{"type":"string","description":"Exact text block to find and replace"},"new_str":{"type":"string","description":"New replacement text to insert"}},"required":["path","old_str","new_str"]}},
+    {"name":"write_file","description":"Create a new text file or completely overwrite an existing file. For modifying existing files, always prefer edit_file instead.",
      "parameters":{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}},
     {"name":"run_command","description":"Run a shell command in the current project. User approval is required.",
      "parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"]}},
@@ -172,6 +250,7 @@ TOOL_DEFS = [
 FUNCTIONS = {
     "list_files": list_files,
     "read_file": read_file,
+    "edit_file": edit_file,
     "write_file": write_file,
     "run_command": run_command,
 }

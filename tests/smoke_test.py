@@ -72,6 +72,28 @@ check("write_file timpa + jawab n -> ditolak",
 check("write_file timpa + jawab y -> berhasil",
       tools.write_file("a.txt", "NEW").startswith("wrote") and (project / "a.txt").read_text() == "NEW")
 
+# --- tools.edit_file
+(project / "code.py").write_text("def hello():\n    print('lama')\n    return 42\n", encoding="utf-8")
+answers = iter(["n", "y"])
+builtins.input = lambda *a: next(answers)
+check("edit_file tolak saat jawab n",
+      tools.edit_file("code.py", "print('lama')", "print('baru')") == "Edit rejected by user."
+      and "print('lama')" in (project / "code.py").read_text())
+check("edit_file berhasil saat jawab y (hanya baris target berubah)",
+      tools.edit_file("code.py", "print('lama')", "print('baru')").startswith("edited")
+      and "print('baru')" in (project / "code.py").read_text()
+      and "return 42" in (project / "code.py").read_text())
+check("edit_file target tidak ditemukan",
+      "tidak ditemukan" in tools.edit_file("code.py", "baris_gaib", "x"))
+(project / "ambigu.txt").write_text("duplikat\nduplikat\n", encoding="utf-8")
+check("edit_file target ambigu (>1) ditolak",
+      "ditemukan sebanyak 2 kali" in tools.edit_file("ambigu.txt", "duplikat", "x"))
+try:
+    tools.edit_file(".env", "a", "b")
+    check("edit_file memblokir file sensitif", False)
+except PermissionError:
+    check("edit_file memblokir file sensitif", True)
+
 # --- tools.run_command
 builtins.input = lambda *a: "y"
 out = tools.run_command("echo halo")
