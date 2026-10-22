@@ -7,4 +7,4 @@ for _s in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
-__version__ = "0.1.2"
+__version__ = "0.2.0"
