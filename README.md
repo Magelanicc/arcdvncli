@@ -6,8 +6,8 @@ ARCDVN Code adalah asisten AI coding (AI Agent) yang berjalan langsung di dalam 
 
 - **Berjalan Otomatis di Proyek**: Mampu membaca file, mengedit kode secara presisi (*search-and-replace* hemat token), dan melihat struktur folder secara mandiri.
 - **Eksekusi Perintah Aman**: AI bisa menjalankan perintah terminal (seperti menginstal paket atau menjalankan script), namun akan **selalu** meminta izin `(y/N)` dari Anda terlebih dahulu. Menimpa atau mengedit file yang sudah ada juga selalu meminta izin.
-- **Bebas Pilih Model AI**: Anda bisa memasukkan API Key dari **OpenRouter** dan bebas memilih model AI apa pun yang ingin dipakai.
-- **Konfigurasi Global**: Pengaturan API Key tersimpan di komputer Anda, cukup disetel sekali via terminal.
+- **Dukungan Multi-Provider (Google Gemini & OpenRouter)**: Bebas memilih antara **Google Gemini API** (default: `gemini-3.8-flash`) atau **OpenRouter** (berbagai model open-source/komersial). Kedua kunci API disimpan terpisah dan aman.
+- **Konfigurasi Global & Uji Koneksi**: Pengaturan tersimpan secara aman di `~/.arcdvncli_env` (izin 600 di Unix). Fitur uji koneksi memungkinkan verifikasi status API sebelum memulai tugas.
 
 ## 🛠️ Cara Install
 
@@ -24,11 +24,11 @@ Prasyarat: **Python 3.10+**, **git**, dan **pipx**.
 Setelah itu **tutup dan buka lagi terminal**, lalu:
 
 ```bash
-pipx install git+https://github.com/Magelanicc/arcdvncli.git@v0.1.2
+pipx install git+https://github.com/Magelanicc/arcdvncli.git@v0.2.0
 arcdvncli --version
 ```
 
-(Ganti `v0.1.2` dengan versi terbaru di halaman [Releases](https://github.com/Magelanicc/arcdvncli/releases).)
+(Ganti `v0.2.0` dengan versi terbaru di halaman [Releases](https://github.com/Magelanicc/arcdvncli/releases).)
 
 ### Cara 2: Binary siap pakai (tanpa Python)
 
@@ -47,11 +47,11 @@ Masuk ke folder proyek Anda, lalu ketik:
 ```bash
 arcdvncli
 ```
-Jika ini pertama kalinya, ketik `/settings` untuk mengatur API Key OpenRouter Anda.
+Jika ini pertama kalinya, ketik `/settings` untuk memilih provider (Google Gemini / OpenRouter) dan mengatur API Key Anda.
 Perintah bawaan:
 - `/help` : Melihat daftar bantuan lengkap
-- `/settings` : Mengubah API Key OpenRouter dan Model
-- `/status` : Melihat info proyek, git branch, jumlah pesan konteks, dan model
+- `/settings` : Mengubah Provider AI (Gemini / OpenRouter), API Key, Model, dan Uji Koneksi
+- `/status` : Melihat info proyek, git branch, jumlah pesan konteks, provider, dan model
 - `/diff` : Melihat git diff perubahan kode di proyek saat ini
 - `/details` : Mengaktifkan/menonaktifkan detail output tool
 - `/clear` : Membersihkan riwayat percakapan jika AI mulai bingung
@@ -86,9 +86,9 @@ Metode manual:
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e .
 python tests/smoke_test.py
+python -m unittest discover -s tests -v
 ```
 
 Rilis: ubah `__version__` di `arcdvncli/__init__.py`, commit, lalu `git tag vX.Y.Z && git push origin vX.Y.Z`. GitHub Actions otomatis menguji di 3 OS, membuat binary, dan menerbitkan Release.
 
 ---
-*Dibuat untuk mempermudah coding langsung dari terminal.*

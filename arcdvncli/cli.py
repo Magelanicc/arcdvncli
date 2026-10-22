@@ -18,15 +18,22 @@ from rich.table import Table
 
 from . import __version__
 from .agent import run_agent
-from .llm import load_env, save_setting
+from .llm import (
+    load_env,
+    save_setting,
+    get_provider_config,
+    get_active_provider,
+    test_connection,
+    PROVIDERS,
+)
 from .updater import check_for_update
 
 console = Console()
 
 COMMAND_MAP = {
     "/help": "Tampilkan panduan dan daftar perintah",
-    "/settings": "Atur API Key OpenRouter dan Model",
-    "/status": "Lihat status proyek, git, context window, dan model",
+    "/settings": "Atur Provider AI (Gemini / OpenRouter), API Key, dan Model",
+    "/status": "Lihat status proyek, git, context window, provider, dan model",
     "/diff": "Tinjau git diff perubahan kode di proyek saat ini",
     "/details": "Aktifkan/nonaktifkan output detail dari tool",
     "/clear": "Hapus riwayat percakapan dan segarkan layar",
@@ -56,7 +63,9 @@ def _get_git_branch():
 def banner(model=None):
     os.system("cls" if os.name == "nt" else "clear")
 
-    model_name = model or os.getenv("ARCDVN_MODEL", "google/gemini-2.5-flash")
+    cfg = get_provider_config()
+    model_name = model or cfg["model"]
+    prov_name = cfg["name"]
     cwd_name = os.path.basename(os.getcwd()) or os.getcwd()
     git_branch = _get_git_branch()
     git_badge = f"  •  [bold green]🌿 {git_branch}[/bold green]" if git_branch else ""
@@ -71,6 +80,7 @@ def banner(model=None):
 
     info_line = (
         f"[dim]Project:[/dim] [bold white]{cwd_name}[/bold white]{git_badge}  •  "
+        f"[dim]Provider:[/dim] [bold yellow]{prov_name}[/bold yellow]  •  "
         f"[dim]Model:[/dim] [bold cyan]{model_name}[/bold cyan]  •  "
         f"[dim]v{__version__}[/dim]"
     )
@@ -88,7 +98,7 @@ def banner(model=None):
 
     console.print(
         "[dim]Tips:[/dim] [cyan]/help[/cyan] [dim]perintah[/dim] • "
-        "[cyan]/settings[/cyan] [dim]atur openrouter[/dim] • "
+        "[cyan]/settings[/cyan] [dim]atur provider & model[/dim] • "
         "[cyan]Tab[/cyan] [dim]autocomplete[/dim] • "
         "[cyan]/diff[/cyan] [dim]cek perubahan[/dim] • "
         "[cyan]Ctrl+C[/cyan] [dim]batal[/dim]\n"
@@ -127,11 +137,14 @@ def _prompt_session():
 
 
 def _print_context_status(model, history):
+    cfg = get_provider_config()
     details = os.getenv("ARCDVNCLI_TOOL_DETAILS", "0") == "1"
     git_branch = _get_git_branch()
     branch_str = f" [dim]│ Branch[/dim] [green]{git_branch}[/green]" if git_branch else ""
+    short_model = model.split("/")[-1] if "/" in model else model
     console.print(
-        f"[dim]Model[/dim] [cyan]{model}[/cyan]  "
+        f"[dim]Provider[/dim] [yellow]{cfg['name']}[/yellow]  "
+        f"[dim]│ Model[/dim] [cyan]{short_model}[/cyan]  "
         f"[dim]│ Context[/dim] [cyan]{len(history)} msgs[/cyan]{branch_str}  "
         f"[dim]│ Details[/dim] [cyan]{'ON' if details else 'OFF'}[/cyan]"
     )
@@ -158,45 +171,161 @@ def _command_help():
 
 def _settings():
     load_env()
-    current_key = os.getenv("ARCDVN_API_KEY", "")
-    current_model = os.getenv("ARCDVN_MODEL", "google/gemini-2.5-flash")
-    masked_key = f"{current_key[:8]}...{current_key[-4:]}" if len(current_key) > 12 else "(belum disetel)"
+    while True:
+        cfg = get_provider_config()
+        current_provider = cfg["id"]
+        current_key = cfg["key"]
+        current_model = cfg["model"]
+        current_base = cfg["base_url"]
 
-    console.print(
-        Panel(
-            f"[dim]Provider:[/dim]  [bold]OpenRouter[/bold] (openrouter.ai/models)\n"
-            f"[dim]API Key :[/dim]  [bold yellow]{masked_key}[/bold yellow]\n"
-            f"[dim]Model   :[/dim]  [bold cyan]{current_model}[/bold cyan]",
-            title="[bold cyan]Pengaturan ARCDVN (OpenRouter)[/bold cyan]",
-            border_style="cyan",
-            box=box.ROUNDED,
-            padding=(0, 2),
+        masked_key = (
+            f"{current_key[:6]}...{current_key[-4:]}"
+            if len(current_key) > 10
+            else ("[green]Tersimpan[/green]" if current_key else "[red](belum disetel)[/red]")
         )
-    )
 
-    console.print("[dim]Masukkan API Key OpenRouter baru (kosongkan jika tidak ingin mengubah): [/dim]", end="")
-    try:
-        new_key = getpass.getpass("").strip()
-    except Exception:
-        new_key = input().strip()
+        google_key = os.getenv("ARCDVN_GOOGLE_API_KEY") or (os.getenv("ARCDVN_API_KEY") if current_provider == "google" else "")
+        openrouter_key = os.getenv("ARCDVN_OPENROUTER_API_KEY") or (os.getenv("ARCDVN_API_KEY") if current_provider == "openrouter" else "")
 
-    if new_key:
-        save_setting("ARCDVN_API_KEY", new_key)
-        console.print("[green]✓ API Key OpenRouter berhasil disimpan.[/green]")
+        google_status = "[green]✓ Siap[/green]" if google_key else "[yellow]Belum ada key[/yellow]"
+        openrouter_status = "[green]✓ Siap[/green]" if openrouter_key else "[yellow]Belum ada key[/yellow]"
 
-    console.print(
-        "[dim]Masukkan Model OpenRouter baru (kosongkan jika tidak ingin mengubah)\n"
-        "Contoh: google/gemini-2.5-flash, deepseek/deepseek-chat, meta-llama/llama-3.3-70b-instruct:free\n"
-        "Model: [/dim]",
-        end="",
-    )
-    new_model = input().strip()
-    if new_model:
-        save_setting("ARCDVN_MODEL", new_model)
-        console.print(f"[green]✓ Model OpenRouter diubah ke: [bold]{new_model}[/bold][/green]\n")
-        return new_model
+        active_badge_google = " [bold cyan](AKTIF)[/bold cyan]" if current_provider == "google" else ""
+        active_badge_or = " [bold cyan](AKTIF)[/bold cyan]" if current_provider == "openrouter" else ""
 
-    return current_model
+        console.print(
+            Panel(
+                f"[dim]Provider Aktif :[/dim]  [bold yellow]{cfg['name']}[/bold yellow]\n"
+                f"[dim]Model Aktif    :[/dim]  [bold cyan]{current_model}[/bold cyan]\n"
+                f"[dim]Endpoint       :[/dim]  [dim]{current_base}[/dim]\n"
+                f"[dim]API Key Status :[/dim]  {masked_key}\n\n"
+                f"[dim]Daftar Provider Tersimpan:[/dim]\n"
+                f"  • Google Gemini : {google_status}{active_badge_google}\n"
+                f"  • OpenRouter    : {openrouter_status}{active_badge_or}",
+                title="[bold cyan]Pengaturan Provider & Model AI[/bold cyan]",
+                border_style="cyan",
+                box=box.ROUNDED,
+                padding=(0, 2),
+            )
+        )
+
+        console.print(
+            "[bold cyan]Pilihan Menu Pengaturan:[/bold cyan]\n"
+            "  [bold yellow]1[/bold yellow] - Ganti Provider (Google Gemini / OpenRouter)\n"
+            "  [bold yellow]2[/bold yellow] - Atur API Key untuk provider aktif\n"
+            "  [bold yellow]3[/bold yellow] - Ganti Model untuk provider aktif\n"
+            "  [bold yellow]4[/bold yellow] - Tes Koneksi API (Read-only ping)\n"
+            "  [bold yellow]5[/bold yellow] - Atur Endpoint / Base URL Kustom\n"
+            "  [bold yellow]0[/bold yellow] - Selesai & Kembali ke Chat\n"
+        )
+
+        console.print("[dim]Pilih nomor (0-5): [/dim]", end="")
+        try:
+            choice = input().strip()
+        except (KeyboardInterrupt, EOFError):
+            break
+
+        if choice in ("", "0", "exit", "kembali"):
+            break
+
+        elif choice == "1":
+            console.print("\n[bold cyan]Pilih Provider:[/bold cyan]")
+            console.print("  [yellow]1[/yellow] - Google Gemini (Default: gemini-3.8-flash)")
+            console.print("  [yellow]2[/yellow] - OpenRouter (Default: google/gemini-2.5-flash)")
+            console.print("[dim]Pilih (1 atau 2): [/dim]", end="")
+            try:
+                p_choice = input().strip()
+            except (KeyboardInterrupt, EOFError):
+                continue
+
+            if p_choice == "1":
+                save_setting("ARCDVN_PROVIDER", "google")
+                # If model was openrouter-style, reset to gemini default
+                if "/" in current_model or not current_model:
+                    save_setting("ARCDVN_MODEL", PROVIDERS["google"]["default_model"])
+                console.print("[green]✓ Provider aktif beralih ke: Google Gemini[/green]\n")
+            elif p_choice == "2":
+                save_setting("ARCDVN_PROVIDER", "openrouter")
+                if "/" not in current_model:
+                    save_setting("ARCDVN_MODEL", PROVIDERS["openrouter"]["default_model"])
+                console.print("[green]✓ Provider aktif beralih ke: OpenRouter[/green]\n")
+            else:
+                console.print("[yellow]Pilihan dibatalkan.[/yellow]\n")
+
+        elif choice == "2":
+            target_env = cfg["env_key"] or "ARCDVN_API_KEY"
+            console.print(f"\n[dim]Masukkan API Key untuk [bold]{cfg['name']}[/bold] ({target_env}): [/dim]", end="")
+            try:
+                new_key = getpass.getpass("").strip()
+            except Exception:
+                new_key = input().strip()
+
+            if new_key:
+                save_setting(target_env, new_key)
+                save_setting("ARCDVN_API_KEY", new_key)
+                console.print(f"[green]✓ API Key untuk {cfg['name']} berhasil disimpan.[/green]\n")
+            else:
+                console.print("[yellow]Tidak ada perubahan API Key.[/yellow]\n")
+
+        elif choice == "3":
+            hint = PROVIDERS.get(current_provider, {}).get("models_hint", "")
+            console.print(f"\n[dim]Model saat ini: [bold cyan]{current_model}[/bold cyan][/dim]")
+            if hint:
+                console.print(f"[dim]Rekomendasi model {cfg['name']}: {hint}[/dim]")
+            console.print("[dim]Masukkan Model ID baru (kosongkan untuk batal): [/dim]", end="")
+            try:
+                new_model = input().strip()
+            except (KeyboardInterrupt, EOFError):
+                continue
+
+            if new_model:
+                save_setting("ARCDVN_MODEL", new_model)
+                console.print(f"[green]✓ Model diubah ke: [bold]{new_model}[/bold][/green]\n")
+            else:
+                console.print("[yellow]Model tidak diubah.[/yellow]\n")
+
+        elif choice == "4":
+            console.print(f"\n[dim]Menguji koneksi ke {cfg['name']} ({cfg['model']})...[/dim]")
+            success, msg = test_connection()
+            if success:
+                console.print(
+                    Panel(
+                        f"[bold green]✓ {msg}[/bold green]",
+                        border_style="green",
+                        box=box.ROUNDED,
+                        padding=(0, 2),
+                    )
+                )
+            else:
+                console.print(
+                    Panel(
+                        f"[bold red]✗ Gagal:[/bold red] {msg}\n\n"
+                        "[dim]Periksa kembali API Key, kuota akun, atau koneksi internet Anda.[/dim]",
+                        border_style="red",
+                        box=box.ROUNDED,
+                        padding=(0, 2),
+                    )
+                )
+            console.print()
+
+        elif choice == "5":
+            console.print(f"\n[dim]Endpoint default: {cfg['default_base_url']}[/dim]")
+            console.print(f"[dim]Endpoint saat ini: {cfg['base_url']}[/dim]")
+            console.print("[dim]Masukkan URL baru (atau ketik 'default' untuk mereset): [/dim]", end="")
+            try:
+                new_url = input().strip()
+            except (KeyboardInterrupt, EOFError):
+                continue
+
+            if new_url.lower() == "default":
+                save_setting("ARCDVN_BASE_URL", "")
+                console.print(f"[green]✓ Endpoint di-reset ke default: {cfg['default_base_url']}[/green]\n")
+            elif new_url:
+                save_setting("ARCDVN_BASE_URL", new_url.rstrip("/"))
+                console.print(f"[green]✓ Endpoint diubah ke: {new_url}[/green]\n")
+
+    updated_cfg = get_provider_config()
+    return updated_cfg["model"]
 
 
 def _show_git_diff():
@@ -244,7 +373,11 @@ def _show_git_diff():
 
 
 def _command_status(model, history):
+    cfg = get_provider_config()
     git_branch = _get_git_branch()
+    has_key = bool(cfg["key"])
+    key_str = "[bold green]Tersimpan[/bold green]" if has_key else "[bold red]Belum disetel[/bold red]"
+
     table = Table(
         title="Status Sesi ARCDVN",
         title_style="bold cyan",
@@ -255,7 +388,10 @@ def _command_status(model, history):
     )
     table.add_row("[dim]Project Directory[/dim]", os.getcwd())
     table.add_row("[dim]Git Branch[/dim]", f"[bold green]{git_branch}[/bold green]" if git_branch else "[dim]bukan git repo[/dim]")
+    table.add_row("[dim]Provider AI[/dim]", f"[bold yellow]{cfg['name']}[/bold yellow]")
     table.add_row("[dim]Model AI[/dim]", f"[bold cyan]{model}[/bold cyan]")
+    table.add_row("[dim]Endpoint API[/dim]", cfg["base_url"])
+    table.add_row("[dim]Status API Key[/dim]", key_str)
     table.add_row("[dim]Percakapan[/dim]", f"{len(history)} pesan di history")
     table.add_row("[dim]Detail Tool[/dim]", "[bold green]ON[/bold green]" if os.getenv("ARCDVNCLI_TOOL_DETAILS", "0") == "1" else "[dim]OFF[/dim]")
     table.add_row("[dim]Platform[/dim]", f"{sys.platform} • Python {sys.version.split()[0]}")
@@ -281,7 +417,6 @@ def _uninstall_self():
         console.print("[yellow]Pencopotan dibatalkan.[/yellow]\n")
         return False
 
-    # 1. Hapus seluruh file konfigurasi & data di Home directory
     paths = [
         os.path.expanduser("~/.arcdvncli_env"),
         os.path.expanduser("~/.arcdvncli_history"),
@@ -296,7 +431,6 @@ def _uninstall_self():
 
     console.print("[green]✓ Seluruh file konfigurasi, API Key, dan riwayat telah dibersihkan sampai bersih.[/green]")
 
-    # 2. Hapus paket melalui pipx
     try:
         console.print("[dim]Mencopot paket aplikasi via pipx...[/dim]")
         subprocess.run(["pipx", "uninstall", "arcdvncli"], check=False)
@@ -317,7 +451,8 @@ def main():
         return
 
     load_env()
-    model = os.getenv("ARCDVN_MODEL", "google/gemini-2.5-flash")
+    cfg = get_provider_config()
+    model = cfg["model"]
     session = _prompt_session()
 
     banner(model)
@@ -327,12 +462,13 @@ def main():
     history = []
 
     def get_toolbar():
+        c = get_provider_config()
         git_branch = _get_git_branch()
         branch_str = f" • 🌿 {git_branch}" if git_branch else ""
         details = "ON" if os.getenv("ARCDVNCLI_TOOL_DETAILS", "0") == "1" else "OFF"
         short_model = model.split("/")[-1] if "/" in model else model
         return [
-            ("class:bottom-toolbar.model", f" 🤖 {short_model} "),
+            ("class:bottom-toolbar.model", f" 🤖 {c['name']}: {short_model} "),
             ("class:bottom-toolbar.dim", f"• 💬 {len(history)} msgs{branch_str} • Details: {details} "),
             ("class:bottom-toolbar.dim", "• [Tab] menu "),
         ]
@@ -380,6 +516,7 @@ def main():
 
         if user == "/settings":
             model = _settings()
+            banner(model)
             continue
 
         if user == "/uninstall":
@@ -400,11 +537,12 @@ def main():
         try:
             answer = run_agent(user, history)
 
+            c = get_provider_config()
             short_model = model.split("/")[-1] if "/" in model else model
             console.print(
                 Panel(
                     Markdown(answer),
-                    title=f"[bold magenta]⚡ ARCDVN • {short_model}[/bold magenta]",
+                    title=f"[bold magenta]⚡ ARCDVN • {c['name']} • {short_model}[/bold magenta]",
                     border_style="magenta",
                     box=box.ROUNDED,
                     padding=(0, 1),

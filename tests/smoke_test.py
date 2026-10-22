@@ -182,4 +182,5 @@ except Exception as e:
 
 print()
 print("Versi:", __version__, "| Python:", sys.version.split()[0], "| OS:", os.name)
-sys.exit(1 if FAILED else 0)
+if __name__ == "__main__":
+    sys.exit(1 if FAILED else 0)

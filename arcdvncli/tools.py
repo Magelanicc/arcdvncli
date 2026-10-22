@@ -28,7 +28,13 @@ console = Console()
 
 
 def safe_path(path):
-    p = (ROOT / path).resolve()
+    if not path or not str(path).strip():
+        raise ValueError("Path tidak boleh kosong.")
+    path_str = str(path).strip()
+    if "\x00" in path_str:
+        raise ValueError("Path mengandung karakter null byte yang tidak valid.")
+
+    p = (ROOT / path_str).resolve()
     if ROOT != p and ROOT not in p.parents:
         raise ValueError("Path di luar project ditolak.")
     return p
@@ -82,11 +88,20 @@ def _show_diff(old_text, new_text, filename):
         )
 
 
-def list_files(path="."):
+def list_files(path=".", **kwargs):
+    if path is None or path == ".":
+        for k in ("dir", "directory", "folder"):
+            if k in kwargs and kwargs[k]:
+                path = kwargs[k]
+                break
+    path = path or "."
+
     base = safe_path(path)
+    if base.is_file():
+        return str(base.relative_to(ROOT))
+
     out = []
     for dirpath, dirnames, filenames in os.walk(base):
-        # Prune folder ignored SEBELUM masuk (cepat, dan tidak terpengaruh path induk)
         dirnames[:] = sorted(d for d in dirnames if d not in IGNORED)
         for name in sorted(filenames):
             rel = (Path(dirpath) / name).relative_to(ROOT)
@@ -96,21 +111,55 @@ def list_files(path="."):
     return "\n".join(out) or "(empty)"
 
 
-def read_file(path):
+def read_file(path=None, **kwargs):
+    if path is None:
+        for k in ("file_path", "filename", "filepath", "target"):
+            if k in kwargs and kwargs[k]:
+                path = kwargs[k]
+                break
+
+    if path is None:
+        raise ValueError("Parameter 'path' wajib diisi.")
+
     p = safe_path(path)
+    if p.is_dir():
+        raise IsADirectoryError(f"Path adalah direktori: {path}. Gunakan list_files untuk melihat isi direktori.")
     if not p.is_file():
-        raise FileNotFoundError(path)
+        raise FileNotFoundError(f"File tidak ditemukan: {path}")
     if _is_sensitive(p):
         raise PermissionError(f"{p.name} berisi data sensitif, tidak boleh dibaca agent.")
     text = p.read_text(encoding="utf-8", errors="replace")
     return text[:30000]
 
 
-def write_file(path, content):
+def write_file(path=None, content=None, **kwargs):
+    if path is None:
+        for k in ("file_path", "filename", "filepath", "dest", "target_file", "file"):
+            if k in kwargs and kwargs[k]:
+                path = kwargs[k]
+                break
+    if content is None:
+        for k in ("text", "code", "body", "file_content", "data"):
+            if k in kwargs and kwargs[k] is not None:
+                content = kwargs[k]
+                break
+
+    if path is None:
+        raise ValueError("Parameter 'path' wajib diisi.")
+    if content is None:
+        content = ""
+    elif not isinstance(content, str):
+        content = str(content)
+
     p = safe_path(path)
+
+    # Security check: never write or overwrite sensitive files
+    if _is_sensitive(p):
+        raise PermissionError(f"{p.name} berisi data sensitif, tidak boleh ditulis/ditimpa agent.")
+
     if p.exists():
         if not p.is_file():
-            raise IsADirectoryError(path)
+            raise IsADirectoryError(f"Path adalah direktori: {path}")
         try:
             old_text = p.read_text(encoding="utf-8", errors="replace")
             _show_diff(old_text, content, str(p.relative_to(ROOT)))
@@ -119,12 +168,24 @@ def write_file(path, content):
         if not _confirm(f"Timpa file yang sudah ada: {escape(str(p.relative_to(ROOT)))}?"):
             console.print("[red]Penimpaan file dibatalkan oleh user.[/red]")
             return "Write rejected by user."
+
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content, encoding="utf-8")
+
+    # Verification: check file exists on disk and is readable
+    if not p.exists() or not p.is_file():
+        raise IOError(f"Verifikasi penulisan file gagal: {path} tidak ditemukan setelah ditulis.")
+
     return f"wrote {p.relative_to(ROOT)}"
 
 
-def edit_file(path, old_str=None, new_str=None, replace_all=False, **kwargs):
+def edit_file(path=None, old_str=None, new_str=None, replace_all=False, **kwargs):
+    if path is None:
+        for k in ("file_path", "filename", "filepath", "target_file"):
+            if k in kwargs and kwargs[k]:
+                path = kwargs[k]
+                break
+
     # Fallback to alternate param names if LLM uses variations
     if old_str is None:
         for k in ("old_text", "old_content", "target", "search"):
@@ -137,6 +198,8 @@ def edit_file(path, old_str=None, new_str=None, replace_all=False, **kwargs):
                 new_str = kwargs[k]
                 break
 
+    if path is None:
+        raise ValueError("Parameter 'path' wajib diisi.")
     if old_str is None:
         raise ValueError("Parameter 'old_str' wajib diisi.")
     if new_str is None:
@@ -154,7 +217,7 @@ def edit_file(path, old_str=None, new_str=None, replace_all=False, **kwargs):
 
     original_text = p.read_text(encoding="utf-8", errors="replace")
 
-    # 1. Cek kecocokan langsung (exact match)
+    # 1. Exact match check
     if old_str in original_text:
         count = original_text.count(old_str)
         if count > 1 and not replace_all:
@@ -164,7 +227,7 @@ def edit_file(path, old_str=None, new_str=None, replace_all=False, **kwargs):
             )
         new_content = original_text.replace(old_str, new_str, -1 if replace_all else 1)
     else:
-        # 2. Coba normalisasi line ending (\r\n vs \n) jika format baris berbeda
+        # 2. Line ending normalization (\r\n vs \n)
         crlf_file = "\r\n" in original_text
         norm_text = original_text.replace("\r\n", "\n")
         norm_old = old_str.replace("\r\n", "\n")
@@ -205,7 +268,16 @@ def _command_preview(command):
     return command if len(command) <= 120 else command[:117] + "..."
 
 
-def run_command(command):
+def run_command(command=None, **kwargs):
+    if command is None:
+        for k in ("cmd", "shell_command", "script"):
+            if k in kwargs and kwargs[k]:
+                command = kwargs[k]
+                break
+
+    if not command:
+        raise ValueError("Parameter 'command' wajib diisi.")
+
     cmd_display = Syntax(command.strip(), "bash", theme="monokai", word_wrap=True)
     console.print(
         Panel(
@@ -233,18 +305,17 @@ def run_command(command):
     return f"exit_code={r.returncode}\nSTDOUT:\n{r.stdout[-12000:]}\nSTDERR:\n{r.stderr[-12000:]}"
 
 
-
 TOOL_DEFS = [
-    {"name":"list_files","description":"List project files recursively. Use this to inspect project structure.",
-     "parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":[]}},
-    {"name":"read_file","description":"Read a text file from the current project.",
-     "parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}},
-    {"name":"edit_file","description":"Edit an existing file by replacing a specific block of text (old_str) with new text (new_str). This is much faster, token-efficient, and preferred over write_file for modifying existing files. old_str must uniquely match the code in the file.",
-     "parameters":{"type":"object","properties":{"path":{"type":"string","description":"Relative path to the file to edit"},"old_str":{"type":"string","description":"Exact text block to find and replace"},"new_str":{"type":"string","description":"New replacement text to insert"}},"required":["path","old_str","new_str"]}},
-    {"name":"write_file","description":"Create a new text file or completely overwrite an existing file. For modifying existing files, always prefer edit_file instead.",
-     "parameters":{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}},
-    {"name":"run_command","description":"Run a shell command in the current project. User approval is required.",
-     "parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"]}},
+    {"name": "list_files", "description": "List project files recursively. Use this to inspect project structure.",
+     "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": []}},
+    {"name": "read_file", "description": "Read a text file from the current project.",
+     "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}},
+    {"name": "edit_file", "description": "Edit an existing file by replacing a specific block of text (old_str) with new text (new_str). This is much faster, token-efficient, and preferred over write_file for modifying existing files. old_str must uniquely match the code in the file.",
+     "parameters": {"type": "object", "properties": {"path": {"type": "string", "description": "Relative path to the file to edit"}, "old_str": {"type": "string", "description": "Exact text block to find and replace"}, "new_str": {"type": "string", "description": "New replacement text to insert"}}, "required": ["path", "old_str", "new_str"]}},
+    {"name": "write_file", "description": "Create a new text file or completely overwrite an existing file. For modifying existing files, always prefer edit_file instead.",
+     "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]}},
+    {"name": "run_command", "description": "Run a shell command in the current project. User approval is required.",
+     "parameters": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}},
 ]
 
 FUNCTIONS = {
