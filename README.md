@@ -6,8 +6,8 @@ ARCDVN Code adalah asisten AI coding (AI Agent) yang berjalan langsung di dalam 
 
 - **Berjalan Otomatis di Proyek**: Mampu membaca file, mengedit kode secara presisi (*search-and-replace* hemat token), dan melihat struktur folder secara mandiri.
 - **Eksekusi Perintah Aman**: AI bisa menjalankan perintah terminal (seperti menginstal paket atau menjalankan script), namun akan **selalu** meminta izin `(y/N)` dari Anda terlebih dahulu. Menimpa atau mengedit file yang sudah ada juga selalu meminta izin.
-- **Dukungan Multi-Provider (Google Gemini & OpenRouter)**: Bebas memilih antara **Google Gemini API** (default: `gemini-3.8-flash`) atau **OpenRouter** (berbagai model open-source/komersial). Kedua kunci API disimpan terpisah dan aman.
-- **Konfigurasi Global & Uji Koneksi**: Pengaturan tersimpan secara aman di `~/.arcdvncli_env` (izin 600 di Unix). Fitur uji koneksi memungkinkan verifikasi status API sebelum memulai tugas.
+- **Dukungan Multi-Provider Universal**: Bebas memilih provider AI favorit Anda — **Google Gemini**, **OpenAI**, **Anthropic Claude** (Native Messages API), **OpenRouter**, **Groq**, **DeepSeek**, **NVIDIA NIM**, **Cerebras**, **Together AI**, **Fireworks AI**, **Mistral**, atau **Custom OpenAI-Compatible** endpoint (misal Ollama/vLLM lokal). Seluruh kredensial API dan konfigurasi model diisolasi secara ketat dan mandiri.
+- **Konfigurasi Global, Kemampuan Model & Uji Koneksi**: Pengaturan tersimpan secara aman di `~/.arcdvncli_env` (izin 600 di Unix) dengan redaksi rahasia otomatis. Fitur uji koneksi dan inspeksi kemampuan model (tool calling, context window) memastikan verifikasi status API sebelum memulai tugas.
 
 ## 🛠️ Cara Install
 
@@ -24,11 +24,11 @@ Prasyarat: **Python 3.10+**, **git**, dan **pipx**.
 Setelah itu **tutup dan buka lagi terminal**, lalu:
 
 ```bash
-pipx install git+https://github.com/Magelanicc/arcdvncli.git@v0.2.0
+pipx install git+https://github.com/Magelanicc/arcdvncli.git@v0.3.0
 arcdvncli --version
 ```
 
-(Ganti `v0.2.0` dengan versi terbaru di halaman [Releases](https://github.com/Magelanicc/arcdvncli/releases).)
+(Ganti `v0.3.0` dengan versi terbaru di halaman [Releases](https://github.com/Magelanicc/arcdvncli/releases).)
 
 ### Cara 2: Binary siap pakai (tanpa Python)
 
@@ -47,10 +47,10 @@ Masuk ke folder proyek Anda, lalu ketik:
 ```bash
 arcdvncli
 ```
-Jika ini pertama kalinya, ketik `/settings` untuk memilih provider (Google Gemini / OpenRouter) dan mengatur API Key Anda.
+Jika ini pertama kalinya, ketik `/settings` untuk memilih provider AI dan mengatur API Key Anda.
 Perintah bawaan:
 - `/help` : Melihat daftar bantuan lengkap
-- `/settings` : Mengubah Provider AI (Gemini / OpenRouter), API Key, Model, dan Uji Koneksi
+- `/settings` : Mengubah Provider AI, API Key, Model, Base URL, Kemampuan Model, dan Uji Koneksi
 - `/status` : Melihat info proyek, git branch, jumlah pesan konteks, provider, dan model
 - `/diff` : Melihat git diff perubahan kode di proyek saat ini
 - `/details` : Mengaktifkan/menonaktifkan detail output tool
